@@ -14,6 +14,18 @@ Discord Rich Presence proof of concept application for the Playstation Portable.
 - UMD support (implemented but untested, doesn't seem to work in PPSSPP)
 - ISO/CSO support
 
+# sakuraPresencePRX
+PRX module version. Only works in PPSSPP, crashes on real hardware. This would be the ideal version as it runs in the background without the user having to interact with it, almost like a native plugin.
+
+## Working:
+- Initializing network state (PPSSPP)
+- Logging (PPSSPP)
+## Not Working:
+- Launching on real hardware at all
+## Untested:
+- UMD + game launching (as the module crashes on real hardware and you can't "switch" to a UMD in PPSSPP if one isn't already mounted)
+
+
 
 ## Roadmap:
 - [ ] Convert to plug-in that runs as both VSH and GAME module (can't get networking functions to work in plugin mode for some reason)
