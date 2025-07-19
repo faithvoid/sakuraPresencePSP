@@ -7,6 +7,7 @@ Discord Rich Presence proof of concept application for the Playstation Portable.
 ## Working:
 - Fetching title ID from .PBP file
 - Sending title ID from .PBP as a packet to a hardcoded IP address over network via the first available connection
+- Launching .PBP (PPSSPP only)
 
 ## Not Working:
 - Launching .PBP on real hardware (sceLoadExec only launches .PBPs when it has kernel access, which this application doesn't by default, but PPSSPP ignores that and launches PBPs anyway)
