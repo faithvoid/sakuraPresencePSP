@@ -14,19 +14,17 @@ Discord Rich Presence proof of concept application for the Playstation Portable.
 - UMD support (implemented but untested, doesn't seem to work in PPSSPP)
 - ISO/CSO support
 
-# sakuraPresencePRX
-PRX module version. Only works in PPSSPP, crashes on real hardware. This would be the ideal version as it runs in the background without the user having to interact with it, almost like a native plugin.
+# sakuraPresencePRX (plugin version)
+PRX module version. Currently partially working, it launches after the user launches a game from the XMB and correctly sends presence data via the PARAM.SFO on the UMD (virtual or not) but then crashes the system around the main menu of most games. 
 
 ## Working:
-- Initializing network state (PPSSPP)
-- Logging (PPSSPP)
+- Initializing network state after game launch
+- Sending presence data after network connect
+- Logging to memory card
 ## Not Working:
-- Launching on real hardware at all
-## Untested:
-- UMD + game launching (as the module crashes on real hardware and you can't "switch" to a UMD in PPSSPP if one isn't already mounted)
-
+- Progressing past the main menu in any game (it seems there's some sort of resource issue, as games will successfully load their intro videos, but will crash shortly after module cleanup). 
 
 
 ## Roadmap:
-- [ ] Convert to plug-in that runs as both VSH and GAME module (can't get networking functions to work in plugin mode for some reason)
 - [ ] Move server IP and port to .cfg file
+- [ ] Get .PRX plugin to stop crashing in-game
