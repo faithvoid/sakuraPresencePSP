@@ -15,10 +15,43 @@
 
 PSP_MODULE_INFO("sakuraPresencePRX", PSP_MODULE_USER, 1, 1);
 
-#define SERVER_IP "192.168.1.110"
-#define SERVER_PORT 1102
 #define LOG_FILE "ms0:/log.txt"
+#define PRESENCE_FILE "ms0:/presence.txt"
 
+char SERVER_IP[32] = {0};
+int SERVER_PORT = 0;
+
+int loadPresenceConfig() {
+    SceUID fd = sceIoOpen(PRESENCE_FILE, PSP_O_RDONLY, 0777);
+    if (fd < 0) {
+        logline("Failed to open presence.txt");
+        return -1;
+    }
+
+    char buf[128] = {0};
+    int size = sceIoRead(fd, buf, sizeof(buf) - 1);
+    sceIoClose(fd);
+    if (size <= 0) {
+        logline("Failed to read presence.txt");
+        return -1;
+    }
+
+    char* colon = strchr(buf, ':');
+    if (!colon) {
+        logline("Invalid presence.txt format");
+        return -1;
+    }
+
+    *colon = '\0';
+    strncpy(SERVER_IP, buf, sizeof(SERVER_IP)-1);
+    SERVER_PORT = atoi(colon + 1);
+
+    logline("Loaded SERVER_IP and SERVER_PORT from presence.txt");
+    logline(SERVER_IP);
+    logInt("SERVER_PORT", SERVER_PORT);
+
+    return 0;
+}
 
 void logline(const char* msg) {
     SceUID fd = sceIoOpen(LOG_FILE, PSP_O_WRONLY | PSP_O_CREAT | PSP_O_APPEND, 0666);
