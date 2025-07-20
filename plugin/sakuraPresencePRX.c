@@ -13,14 +13,13 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
-PSP_MODULE_INFO("sakuraPresencePRX", 0x1000, 1, 1);
+PSP_MODULE_INFO("sakuraPresencePRX", PSP_MODULE_USER, 1, 1);
 
-// TODO: Move these to a .cfg file
 #define SERVER_IP "192.168.1.110"
 #define SERVER_PORT 1102
 #define LOG_FILE "ms0:/log.txt"
 
-// Log each step of the process to log.txt in case of error.
+
 void logline(const char* msg) {
     SceUID fd = sceIoOpen(LOG_FILE, PSP_O_WRONLY | PSP_O_CREAT | PSP_O_APPEND, 0666);
     if (fd >= 0) {
@@ -30,33 +29,114 @@ void logline(const char* msg) {
     }
 }
 
-// Set up the network by initializing network modules, then connecting to the first available wireless network. 
+void logHex(const char* label, int value) {
+    char hexChars[] = "0123456789ABCDEF";
+    char buf[64];
+    int pos = 0;
+
+    while (*label && pos < 48)
+        buf[pos++] = *label++;
+
+    buf[pos++] = ':';
+    buf[pos++] = ' ';
+    buf[pos++] = '0';
+    buf[pos++] = 'x';
+
+    for (int i = 7; i >= 0; i--)
+        buf[pos++] = hexChars[(value >> (i * 4)) & 0xF];
+
+    buf[pos++] = '\0';
+    logline(buf);
+}
+
+void logInt(const char* label, int value) {
+    char buf[64];
+    int pos = 0;
+
+    while (*label && pos < 48)
+        buf[pos++] = *label++;
+
+    buf[pos++] = ':';
+    buf[pos++] = ' ';
+
+    char digits[12];
+    int i = 0;
+
+    if (value == 0) {
+        digits[i++] = '0';
+    } else {
+        while (value > 0 && i < 11) {
+            digits[i++] = '0' + (value % 10);
+            value /= 10;
+        }
+    }
+
+    while (i > 0 && pos < 63)
+        buf[pos++] = digits[--i];
+
+    buf[pos++] = '\0';
+    logline(buf);
+}
+
 int ensureNetworkReady() {
     int err;
 
     logline("Loading net modules...");
-    if ((err = sceUtilityLoadNetModule(PSP_NET_MODULE_COMMON)) < 0) return err;
-    if ((err = sceUtilityLoadNetModule(PSP_NET_MODULE_INET)) < 0) return err;
-    if ((err = sceNetInit(128 * 1024, 0x30, 0x1000, 0x30, 0x1000)) < 0) return err;
-    if ((err = sceNetInetInit()) < 0) return err;
-    if ((err = sceNetApctlInit(0x1800, 48)) < 0) return err;
-    if ((err = sceNetApctlConnect(1)) < 0) return err;
+
+    err = sceUtilityLoadNetModule(PSP_NET_MODULE_COMMON);
+    if (err < 0 && err != 0x80110802) {
+        logHex("Load COMMON failed", err);
+        return err;
+    }
+
+    err = sceUtilityLoadNetModule(PSP_NET_MODULE_INET);
+    if (err < 0 && err != 0x80110802) {
+        logHex("Load INET failed", err);
+        return err;
+    }
+
+    if ((err = sceNetInit(128 * 1024, 0x30, 0x1000, 0x30, 0x1000)) < 0) {
+        logHex("sceNetInit failed", err);
+        return err;
+    }
+
+    if ((err = sceNetInetInit()) < 0) {
+        logHex("sceNetInetInit failed", err);
+        return err;
+    }
+
+    if ((err = sceNetApctlInit(0x1800, 48)) < 0) {
+        logHex("sceNetApctlInit failed", err);
+        return err;
+    }
+
+    if ((err = sceNetApctlConnect(1)) < 0) {
+        logHex("sceNetApctlConnect failed", err);
+        return err;
+    }
 
     int lastState = -1;
-    while (1) {
+    int retries = 0;
+    while (retries++ < 100) {
         int state;
         sceNetApctlGetState(&state);
         if (state != lastState) {
             lastState = state;
+            logInt("Net state", state);
         }
         if (state == 4) break;
+        sceKernelDelayThread(100000); // 100ms
+    }
+
+    if (lastState != 4) {
+        logline("Network connect timeout");
+        return -1;
     }
 
     logline("Network connected!");
     return 0;
 }
 
-// Attempt to extract game ID from disc0, unsure if this works or not. Might work from umd0: if not, but not all games mount via disc0/umd0, so this needs a fallback.
 int extractGameID(char* gameID, size_t gameIDSize) {
     logline("Opening PARAM.SFO...");
     SceUID fd = sceIoOpen("disc0:/PSP_GAME/PARAM.SFO", PSP_O_RDONLY, 0777);
@@ -104,7 +184,6 @@ int extractGameID(char* gameID, size_t gameIDSize) {
     return -1;
 }
 
-// Send system type and title ID as packet to sakuraPresence
 void sendGameID(const char* gameID) {
     int sock = sceNetInetSocket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
@@ -132,6 +211,7 @@ void sendGameID(const char* gameID) {
     sceNetInetClose(sock);
 }
 
+
 void cleanupNetwork() {
     logline("Cleaning up network");
     sceNetApctlDisconnect();
@@ -142,9 +222,11 @@ void cleanupNetwork() {
     sceUtilityUnloadNetModule(PSP_NET_MODULE_COMMON);
 }
 
-// Main SakuraPresencePRX thread
 int sendThread(SceSize args, void *argp) {
     logline("Thread started");
+
+    sceKernelDelayThread(3 * 1000000); // Wait 3 seconds to allow game to load
+
     if (ensureNetworkReady() == 0) {
         char gameID[32] = {0};
         if (extractGameID(gameID, sizeof(gameID)) == 0) {
@@ -156,14 +238,14 @@ int sendThread(SceSize args, void *argp) {
     } else {
         logline("Network init failed");
     }
+
     logline("Thread done");
     sceKernelExitDeleteThread(0);
-    return 0;
 }
 
 int module_start(SceSize args, void *argp) {
     logline("module_start");
-    int thid = sceKernelCreateThread("sakuraPresenceThread", sendThread, 0x18, 0x10000, PSP_THREAD_ATTR_USER, NULL);
+    int thid = sceKernelCreateThread("sakuraPresenceThread", sendThread, 0x30, 0x20000, PSP_THREAD_ATTR_USER, NULL);
     if (thid >= 0) {
         sceKernelStartThread(thid, 0, NULL);
     } else {
@@ -175,4 +257,9 @@ int module_start(SceSize args, void *argp) {
 int module_stop(SceSize args, void *argp) {
     logline("module_stop");
     return 0;
+}
+
+void* getModuleInfo(void)
+{
+	return (void *) &module_info;
 }
